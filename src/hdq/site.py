@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from hdq import casefile, charts
 from hdq.config import TEMPLATES_DIR, Settings
 from hdq.controls import load_controls
 
@@ -152,7 +153,10 @@ def context(settings: Settings) -> dict:
             }
         )
 
+    case = casefile.build(settings.warehouse) if settings.warehouse.exists() else None
     return {
+        "case": case,
+        "charts": charts,
         "run": run,
         "generated": datetime.now(UTC).strftime("%d %b %Y %H:%M UTC"),
         "controls": controls,

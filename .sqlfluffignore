@@ -1,0 +1,2 @@
+# Jinja macro library loaded by the templater, not a SQL file
+sql/macros/

@@ -30,3 +30,12 @@ def test_site_builds_and_says_what_the_data_is(run, settings):
 
 def test_control_catalogue_is_current():
     assert (ROOT / "docs" / "controls.md").read_text() == docs.render(), "run `hdq docs`"
+
+
+def test_case_studies_stay_off_a_clean_history(settings):
+    """The case section is driven by C19 and C01; the sample has no double count, so it is left out."""
+    from hdq import casefile
+
+    case = casefile.build(settings.warehouse)
+    assert case["double_count"] is None
+    assert case["reports"] > 0

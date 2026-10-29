@@ -7,7 +7,7 @@
 <meta name="description" content="Independent SQL data quality controls run on public SEC Form 13F holdings filings by {{ run.filer }}, with a review queue, SLAs and triage runbooks.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
 <style>
 :root {
   color-scheme: light;
@@ -102,9 +102,20 @@ footer { margin-top: 40px; padding: 24px 0 40px; border-top: 1px solid var(--lin
 .theme-toggle { float: right; background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 760px) { .two { grid-template-columns: 1fr; } h1 { font-size: 24px; } details.control > summary { grid-template-columns: 40px 1fr; } details.control > summary .right { grid-column: 2; } }
+{% include "_case.css" %}
 </style>
 </head>
 <body>
+{% if case and case.double_count and not run.sample %}
+{% set dc = case.double_count %}
+<header class="report-head">
+  <div class="note">
+    <div class="topline"><span>Data quality note</span><span><a href="https://github.com/Tee-works/holdings-data-quality">Code</a> · <a href="#console">Control console</a> · <button class="theme-toggle" type="button" id="theme">Theme</button></span></div>
+    <h1>Double counting in Legal &amp; General's Form 13F reports, 2023 to 2024</h1>
+    <p class="byline">Iyanujesu Taiwo Akinyefa · <a href="mailto:iyanujesuakinyefa@gmail.com">iyanujesuakinyefa@gmail.com</a> · <a href="https://www.linkedin.com/in/iyanujesu-akinyefa/">LinkedIn</a> · data as of {{ generated }}</p>
+  </div>
+</header>
+{% else %}
 <header class="top">
   <div class="wrap">
     <button class="theme-toggle" type="button" id="theme">Theme</button>
@@ -124,8 +135,10 @@ footer { margin-top: 40px; padding: 24px 0 40px; border-top: 1px solid var(--lin
     {% endif %}
   </div>
 </header>
+{% endif %}
 
 <main class="wrap">
+{% if case and case.double_count and not run.sample %}{% include "_case.html.j2" %}{% endif %}
 <section>
   <h2>Latest quarter at a glance</h2>
   <p class="sub">{{ latest }}, the current version of the report (original plus any amendments).</p>
@@ -201,7 +214,7 @@ footer { margin-top: 40px; padding: 24px 0 40px; border-top: 1px solid var(--lin
   <table>
     <thead><tr><th>Item</th><th>Control</th><th>Severity</th><th>Status</th><th>First seen</th><th>Review due</th><th>Review SLA</th><th class="num">Items</th><th class="num">Value affected</th><th>Example</th></tr></thead>
     <tbody>
-    {% for i in issues %}
+    {% for i in issues if i.severity != "low" %}
       <tr>
         <td class="mono" style="white-space:nowrap">{{ i.issue_id }}</td>
         <td><a href="#{{ i.control_id }}" class="mono">{{ i.control_id }}</a><div class="muted" style="font-size:12px">{{ i.owner }}</div></td>
@@ -215,11 +228,21 @@ footer { margin-top: 40px; padding: 24px 0 40px; border-top: 1px solid var(--lin
         <td class="muted" style="font-size:12.5px; min-width: 220px">{{ i.example }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="10" class="muted">Nothing in the queue.</td></tr>
+      <tr><td colspan="10" class="muted">Nothing material in the queue.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
+  {% set low = issues|selectattr("severity", "equalto", "low")|list %}
+  {% if low %}
+  <details class="more"><summary>Show {{ low|length }} low-severity items (price moves and cross-entity pricing, for information)</summary>
+  <div class="card scroll"><table>
+    <thead><tr><th>Item</th><th>Control</th><th>Status</th><th class="num">Items</th><th class="num">Value affected</th><th>Example</th></tr></thead>
+    <tbody>
+    {% for i in low %}<tr><td class="mono" style="white-space:nowrap">{{ i.issue_id }}</td><td><a href="#{{ i.control_id }}" class="mono">{{ i.control_id }}</a></td><td>{{ i.status }}</td><td class="num">{{ "{:,}".format(i.exceptions|int) }}</td><td class="num">{{ money(i.exception_value) if i.exception_value else "n/q" }}</td><td class="muted" style="font-size:12.5px">{{ i.example }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </details>
+  {% endif %}
 </section>
 
 <section>
@@ -289,7 +312,7 @@ footer { margin-top: 40px; padding: 24px 0 40px; border-top: 1px solid var(--lin
       <h3>Pipeline</h3>
       <p>A scheduled GitHub Actions workflow downloads new filings from SEC EDGAR, loads them into DuckDB exactly as filed, and applies two interpretation rules in reviewed SQL: values are converted to dollars (13F values were reported in thousands until 3 January 2023), and amendments are resolved into the current version of each quarter. Before any control runs, each filing is reconciled line by line against the source document with <a href="https://github.com/trueset-dev/trueset">TrueSet</a>, an open-source data quality library by the author of this page (reported as C16). The controls are written in SQL that both DuckDB and Snowflake accept: DuckDB runs this page, and the same files run on Snowflake with the results reconciled against DuckDB, again with TrueSet. The controls run, the review queue is updated, and the results and state are committed back to the repository, so the history of every run is auditable.</p>
       <h3>Limitations</h3>
-      <p>Form 13F covers US-listed equities and some convertibles and options held by the filer and the managers it includes; it is not the whole of any firm's assets. Controls see only what is in the filing, so they can find inconsistency, invalid values and implausible figures, but cannot confirm a figure against the firm's books. The timeliness control does not model US public holidays.</p>
+      <p>Form 13F covers US-listed equities and some convertibles and options held by the filer and the managers it includes; it is not the whole of any firm's assets. Controls see only what is in the filing, so they can find inconsistency, invalid values and implausible figures, but cannot confirm a figure against the firm's books. The timeliness control counts the 45 days with weekends and US federal holidays, as the SEC does; it cannot see an extension the SEC may have granted.</p>
     </div>
     <div>
       <h3>Data for Power BI</h3>

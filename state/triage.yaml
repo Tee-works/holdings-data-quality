@@ -20,3 +20,46 @@
     0000764068-24-000104 declares $479,842,476,539 exactly. No action.
   by: IA
   "on": 2026-10-29
+2023Q4-C19-24-000003:
+  decision: fixed_upstream
+  note: >-
+    All 767 LGIM Singapore positions (manager 2) also appear under LGIM Ltd (manager 4)
+    with at least as many shares: $67.9bn reported twice. Restatement 0000764068-25-000025
+    (29 May 2025) reports them once under managers "4,2"; manager 4 falls by the same amount.
+  by: IA
+  "on": 2026-10-29
+2024Q1-C19-24-000005:
+  decision: fixed_upstream
+  note: >-
+    778 of 778 manager 2 positions repeated under manager 4: $81.0bn reported twice.
+    Corrected by restatement 0000764068-25-000022 (29 May 2025).
+  by: IA
+  "on": 2026-10-29
+2024Q1-C19-24-000008:
+  decision: fixed_upstream
+  note: >-
+    The July 2024 restatement of 2024Q1 still carries the duplicate (778 of 778 positions).
+    Corrected by the second restatement, 0000764068-25-000022 (29 May 2025).
+  by: IA
+  "on": 2026-10-29
+2024Q2-C19-24-000010:
+  decision: fixed_upstream
+  note: >-
+    2,453 of 2,454 manager 2 positions repeated under manager 4: $93.0bn reported twice.
+    Corrected by restatement 0000764068-25-000021 (29 May 2025).
+  by: IA
+  "on": 2026-10-29
+2024Q3-C19-24-000090:
+  decision: fixed_upstream
+  note: >-
+    2,420 of 2,422 manager 2 positions repeated under manager 4: $99.6bn reported twice.
+    Corrected by restatement 0000764068-25-000017 (28 Feb 2025).
+  by: IA
+  "on": 2026-10-29
+2024Q3-C19-24-000104:
+  decision: fixed_upstream
+  note: >-
+    The same-day restatement of 2024Q3 fixed the line count (see C01) but still carries the
+    duplicate. Corrected by restatement 0000764068-25-000017 (28 Feb 2025).
+  by: IA
+  "on": 2026-10-29

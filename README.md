@@ -14,7 +14,7 @@ flowchart LR
     E -.->|read again, independently| T0[TrueSet<br/>load reconciliation]
     R --> T0
     R --> S[staging SQL<br/>units, amendments]
-    S --> C[18 SQL controls]
+    S --> C[19 SQL controls]
     T0 --> C
     C --> H[(state/results.csv<br/>every run)]
     C --> I[review queue<br/>owners, SLAs]
@@ -49,6 +49,7 @@ They are among the most detailed holdings data a large asset manager publishes: 
 | C16 | Warehouse reconciles to the source document (TrueSet) | completeness | critical | Data Engineering |
 | C17 | Group entities value each security at a consistent price | consistency | low | Pricing |
 | C18 | A new-holdings amendment adds lines rather than repeating the report | uniqueness | high | Regulatory Reporting |
+| C19 | One entity's positions are not repeated in full under another | uniqueness | critical | Regulatory Reporting |
 
 What each one checks, why it matters and how to triage it: [docs/controls.md](docs/controls.md) (generated from the SQL headers; CI fails if it is stale).
 
@@ -60,6 +61,15 @@ A few worth a closer look:
 - **C12** guards the unit rule. 13F values were in thousands of dollars until 3 January 2023 and in dollars after (SEC Form 13F FAQ 62). Staging converts by filing date; C12 flags any report whose scale jumps against the previous quarter, and its detail shows the raw ratio next to the converted one, so a reviewer can see the conversion working across the change. A test proves C12 fails the 2022 to 2023 boundary when fed the values as filed.
 - **C13** computes the 45-day date with weekends and US federal holidays (SEC Form 13F FAQ 25), from a holiday calendar generated in code and tested against the Presidents' Day case in February 2026.
 - **C18** catches a "new holdings" amendment that is really a full report filed under the wrong type, which the staging rules would otherwise add on top of the original.
+
+## What the controls found
+
+The dashboard opens with two cases, each computed from the filings at build time.
+
+- **C19, four reports double counted.** From 2023Q4 to 2024Q3, 99.9% to 100% of LGIM Singapore's positions (767 to 2,454 lines) also appear under LGIM Ltd with at least as many shares: $67.9bn to $99.6bn per report, up to 21% of its value. The 2025 restatements report those positions once, as shared discretion ("4,2"), and LGIM Ltd falls by exactly the duplicated amount. A scale check cannot see it, because every affected quarter is inflated the same way. Across all 52 entity-reports, ordinary overlap between L&G entities is 23% to 61%; the six affected documents sit at 99.9% to 100%, so C19's 95% threshold separates them with no false alarms.
+- **C01 and C02, one line short.** The original 2024Q3 report lists 8,415 lines against 8,414 declared, with values $225,862 above the stated total; the restatement filed the same day carries exactly those figures.
+
+L&G's own restatements corrected both. The point is earlier detection: each would be flagged on the day the report is filed.
 
 ## Load reconciliation with TrueSet
 
@@ -115,7 +125,7 @@ Each run writes a star schema of CSV files next to the dashboard (`site/data/`):
 
 ## Tests
 
-`pytest` (95 tests) builds a synthetic filing history in the exact SEC XML layout, with both default and prefixed namespaces, and a defect planted for each control that can fail on a single filing; it checks that every control finds its defect and nothing else. It also covers unit conversion, amendment resolution, the split rule, the holiday-aware deadline, the review lifecycle and SLA arithmetic (weekends included), the EDGAR client against a fake server (paging, idempotent downloads), the TrueSet reconciliation against deliberately damaged loads and a broken document, Snowflake rendering and DuckDB-to-Snowflake parity, the Power BI keys and the dashboard. CI also lints the Python and the control SQL.
+`pytest` (100 tests) builds a synthetic filing history in the exact SEC XML layout, with both default and prefixed namespaces, and a defect planted for each control that can fail on a single filing; it checks that every control finds its defect and nothing else. It also covers unit conversion, amendment resolution, the split rule, the holiday-aware deadline, the review lifecycle and SLA arithmetic (weekends included), the EDGAR client against a fake server (paging, idempotent downloads), the TrueSet reconciliation against deliberately damaged loads and a broken document, Snowflake rendering and DuckDB-to-Snowflake parity, the Power BI keys and the dashboard. CI also lints the Python and the control SQL.
 
 ## Limitations
 

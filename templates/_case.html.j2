@@ -1,0 +1,45 @@
+{# The written note above the console. Shown only on real data with a C19 finding. #}
+{% set dc = case.double_count %}
+{% set cm = case.count_mismatch %}
+<article class="note">
+  <p class="summary">I ran {{ controls|length }} SQL data quality controls over all {{ case.reports }} Form 13F holdings reports that {{ run.filer }} filed with the SEC from mid-2022 ({{ "{:,}".format(case.lines) }} lines). In four consecutive reports, {{ dc.quarters[0].label }} to {{ dc.quarters[-1].label }}, the positions of {{ dc.inner_name }} were reported under it and again inside {{ dc.outer_name }}. At its largest the duplicate was {{ money(dc.quarters|map(attribute="counted_twice")|max) }}, {{ "%.0f"|format(dc.peak_share * 100) }}% of the report. L&amp;G's restatements in 2025 corrected all four. The checks most teams run first would not have caught it, and below is one that would, on the day each report was filed.</p>
+
+  <h2>1. What the filings show</h2>
+  <p>{{ dc.inner_name }} first appears as an included manager in the {{ dc.quarters[0].label }} report. In that report and the next three, {{ "%.1f"|format(dc.strip|selectattr("is_exception")|map(attribute="pct")|min) }}% to 100% of its positions also appear under {{ dc.outer_name }} with at least as many shares. The restatements remove those positions from {{ dc.outer_name.replace("Legal & General Investment Management", "LGIM") }}, report them once under the combined code "4,2", and each report's total falls by the duplicated amount.</p>
+  <figure>
+    {{ charts.restatement_bars(dc.context) }}
+    <figcaption>Value of each report as restated (solid) and the amount the original counted twice (hatched). The quarters either side were reported once.</figcaption>
+  </figure>
+  <div class="scroll"><table class="plain">
+    <thead><tr><th>Quarter</th><th>First filed</th><th class="num">Value as filed</th><th class="num">Counted twice</th><th class="num">Share</th><th>Restated</th></tr></thead>
+    <tbody>
+    {% for q in dc.quarters %}
+      <tr><td>{{ q.label }}</td><td>{{ q.filed.strftime("%d %b %Y") }}</td><td class="num">{{ money(q.reported) }}</td><td class="num">{{ money(q.counted_twice) }}</td><td class="num">{{ "%.1f"|format(q.share * 100) }}%</td><td>{{ q.fixed.strftime("%d %b %Y") }} ({{ "%.0f"|format(q.months) }} months)</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p>The {{ dc.quarters[1].label }} report was amended in July 2024 and the amendment still carried the duplicate.</p>
+
+  <h2>2. Why the usual checks miss it</h2>
+  <p>The common control on a holdings report compares its total with the previous quarter. That passed every time here, because each affected report was inflated in the same way as the one before it. The signal is inside a single report instead: group entities that run index funds always share many positions, but one entity's book should not sit almost entirely inside another's.</p>
+  <figure>
+    {{ charts.containment_strip(dc.strip) }}
+    <figcaption>Each dot is one entity in one report ({{ dc.normal_count + dc.flagged_count }} in total): the share of its positions that another entity in the same report also holds, with at least as many shares. Ordinary overlap runs from {{ "%.0f"|format(dc.strip|rejectattr("is_exception")|map(attribute="pct")|min) }}% to {{ "%.0f"|format(dc.normal_max) }}%. The {{ dc.flagged_count }} documents affected (originals and amendments) are at 99.9% to 100%.</figcaption>
+  </figure>
+  <p>Control C19 flags any entity with 95% or more of its positions inside another's. Across the whole history it flags those {{ dc.flagged_count }} documents and nothing else. Run when each report was filed, it would have raised {{ dc.quarters[0].label }} on {{ dc.first_filed.strftime("%d %B %Y") }}. Like the other controls it has an owner, a severity, an SLA and a triage runbook, and it runs unchanged on Snowflake.</p>
+  <details class="sql"><summary>The SQL for C19</summary><pre><code>{{ dc.sql }}</code></pre></details>
+
+  {% if cm %}
+  <h2>3. A smaller one</h2>
+  <p>The original {{ cm.label }} report, filed {{ cm.filed.strftime("%d %B %Y") }}, lists {{ "{:,}".format(cm.lines) }} holdings while its summary page declares {{ "{:,}".format(cm.declared_n) }}, and its lines add up to {{ money(cm.line_v - cm.declared_v) }} more than the stated total.{% if cm.fix %} The restatement filed {{ "the same day" if cm.fix.filed == cm.filed else cm.fix.filed.strftime("%d %B %Y") }} declares exactly what the lines add up to. Two critical controls, C01 and C02, check this on every version of every report.{% endif %}</p>
+  {% endif %}
+
+  <h2>{{ "4" if cm else "3" }}. Caveats</h2>
+  <p>This is independent work from public filings on <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK={{ run.cik }}&amp;type=13F">SEC EDGAR</a> and is not affiliated with or endorsed by {{ run.filer }}. Every figure is computed from the filings and can be checked against them. The filings show what changed, not why; that explanation is L&amp;G's to give, and L&amp;G's own restatements corrected everything described here.</p>
+  <p class="signoff">I wrote this alongside my application for the Data Quality Manager role in L&amp;G Asset Management. The code, tests and every control are in the <a href="https://github.com/Tee-works/holdings-data-quality">repository</a>, and the full control console, refreshed weekly, is below.</p>
+</article>
+
+<div class="appendix-head" id="console">
+  <h2>Appendix: control console</h2>
+  <p class="sub">Every control, every quarter, the review queue and the filings in scope.</p>
+</div>

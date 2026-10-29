@@ -27,6 +27,7 @@ EXPECTED = {
     "C16": {},  # the load is faithful; see test_load_reconciliation.py for the failure cases
     "C17": {"2023Q1": 1},  # only the odd one of three entities
     "C18": {},  # the sample's new-holdings amendment is genuinely new; see the tampering test
+    "C19": {},  # the sample's two managers overlap only partly; see the double-count tests
 }
 
 
@@ -85,7 +86,7 @@ def test_period_controls_are_not_applicable_in_the_first_quarter(run):
 def test_superseded_report_is_checked_as_a_document_only(run):
     r = run.results
     superseded = r[r.version_role == "superseded"]
-    assert set(superseded.control_id) == {"C01", "C02", "C13", "C16", "C18"}
+    assert set(superseded.control_id) == {"C01", "C02", "C13", "C16", "C18", "C19"}
 
 
 def test_every_control_has_a_usable_runbook():
@@ -162,3 +163,45 @@ def test_deadline_moves_past_weekends_and_federal_holidays(con):
     )
     detail = con.execute(f"select detail, is_exception from ({_control('C13').query})").fetchone()
     assert detail == ("filed 2026-02-17, computed 45-day date 2026-02-17", False)
+
+
+def _c19(lines):
+    """Run C19 on a one-filing book given as (manager, cusip, shares) tuples."""
+    con = duckdb.connect()
+    rows = ",".join(
+        f"('a', date '2024-03-31', '{m}', '{c}', null, {s}, {s * 10.0})" for m, c, s in lines
+    )
+    con.execute(
+        f"create view holding as select * from (values {rows}) as t"
+        "(accession, period_of_report, other_manager, cusip, put_call, amount, value_usd)"
+    )
+    con.execute(
+        "create view filing as select 'a' as accession, date '2024-03-31' as period_of_report"
+    )
+    return con.execute(_control("C19").query).df()
+
+
+def test_double_count_is_caught_when_one_book_sits_inside_another():
+    parent = [("4", f"C{i:03d}", 1000.0) for i in range(200)]
+    child = [("2", f"C{i:03d}", 400.0) for i in range(80)]  # every position also under "4"
+    r = _c19(parent + child).set_index("entity")
+    assert r.loc["other manager 2", "is_exception"]
+    assert r.loc["other manager 2", "value_usd"] == 80 * 4000.0
+    assert "80 of 80" in r.loc["other manager 2", "detail"]
+    assert not r.loc["other manager 4", "is_exception"]
+
+
+def test_ordinary_index_overlap_is_not_a_double_count():
+    parent = [("4", f"C{i:03d}", 1000.0) for i in range(200)]
+    child = [("2", f"C{i:03d}", 400.0) for i in range(60)] + [
+        ("2", f"D{i:03d}", 400.0) for i in range(40)
+    ]
+    r = _c19(parent + child).set_index("entity")
+    assert not r.is_exception.any()  # 60% overlap, as between L&G entities in a normal quarter
+
+
+def test_shared_discretion_lines_are_not_compared():
+    book = [("4", f"C{i:03d}", 1000.0) for i in range(100)] + [
+        ("4,2", f"C{i:03d}", 400.0) for i in range(100)
+    ]
+    assert not _c19(book).is_exception.any()
