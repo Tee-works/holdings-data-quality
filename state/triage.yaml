@@ -1,0 +1,22 @@
+# Triage decisions for issues in the log, keyed by issue id (see the dashboard).
+# A decision stops the SLA clock. Changes go through a pull request, so every
+# decision has a reviewer and a date in version control.
+#
+# decision: explained | accepted | raised_with_source | fixed_upstream
+
+2024Q3-C01-24-000090:
+  decision: fixed_upstream
+  note: >-
+    Original 13F-HR (0000764068-24-000090) lists 8,415 lines against 8,414 on the
+    summary page. Restatement 0000764068-24-000104, filed the same day, declares
+    8,415 lines, matching the information table. Superseded report; no action.
+  by: IA
+  "on": 2026-10-29
+2024Q3-C02-24-000090:
+  decision: fixed_upstream
+  note: >-
+    Lines add up to $479,842,476,539 against $479,842,250,677 on the summary page
+    (difference $225,862, the value of the missing line count). Restatement
+    0000764068-24-000104 declares $479,842,476,539 exactly. No action.
+  by: IA
+  "on": 2026-10-29

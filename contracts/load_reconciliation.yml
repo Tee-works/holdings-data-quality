@@ -1,0 +1,17 @@
+# TrueSet suite: does the warehouse hold exactly what each SEC document says?
+# Run once per filing by `hdq build`. Primary: the lines loaded into DuckDB.
+# Reference ("source"): the same information table read straight from the XML.
+# Results land in the warehouse table raw_load_check, where control C16 reports them.
+suite: document_vs_warehouse
+checks:
+  - type: row_count_parity
+    reference: source
+    tolerance: 0.0
+    owner: Data Engineering
+    description: Every line in the information table landed in the warehouse, and nothing else did.
+  - type: value_parity
+    key: line_key
+    columns: [cusip, issuer_name, value, amount, amount_type, investment_discretion, other_manager, put_call]
+    reference: source
+    owner: Data Engineering
+    description: Every loaded line carries the same identifiers, values and codes as the document.

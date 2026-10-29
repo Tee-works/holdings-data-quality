@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      # fakesnow is a Snowflake emulator, used to run the Snowflake path end to end in CI.
+      - run: pip install -e ".[dev,snowflake]" "fakesnow==0.12.1"
+      - name: Lint Python
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Lint control SQL
+        run: sqlfluff lint controls sql
+      - name: Tests (planted defects, review queue, SLA, EDGAR client, TrueSet, DuckDB vs Snowflake)
+        run: pytest -q
+      - name: Control catalogue is current
+        run: hdq docs && git diff --exit-code docs/controls.md
+      - name: End-to-end on the sample
+        run: hdq demo

@@ -1,0 +1,82 @@
+name: refresh
+
+# Weekly: pull any new 13F filings from SEC EDGAR, run every control, update the
+# issue log, commit the run history and publish the dashboard to GitHub Pages.
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - controls/**
+      - sql/**
+      - src/**
+      - templates/**
+      - state/triage.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # commit the run history back
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .  # editable: controls/, sql/ and templates/ are read from the checkout
+
+      # Filings never change once published, so downloaded ones are cached between runs.
+      - uses: actions/cache@v4
+        with:
+          path: data/sec/raw
+          key: sec-raw-${{ github.run_id }}
+          restore-keys: sec-raw-
+
+      - name: Fetch, build, check, site
+        env:
+          # SEC asks automated clients to identify themselves: "Name email@example.com".
+          # Set it under Settings > Secrets and variables > Actions > Variables.
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
+        run: hdq all
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Commit run history and review queue
+        # Publishing does not depend on this step: if main is protected or moved on, the
+        # dashboard still deploys; only this run's entry in the history is lost.
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Control run $(date -u +%Y-%m-%dT%H:%MZ)"
+          git pull --rebase
+          git push
+
+  deploy:
+    needs: run
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

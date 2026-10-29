@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Holdings Data Quality Monitor</title>
+<meta name="description" content="Independent SQL data quality controls run on public SEC Form 13F holdings filings by {{ run.filer }}, with a review queue, SLAs and triage runbooks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f5f2; --surface: #fcfcfb; --surface-2: #f0efec; --line: #e2e0da;
+  --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #7a7974;
+  --accent: #2a78d6; --accent-soft: #cde2fb;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --good-ink: #006300; --critical-ink: #a32424; --warning-ink: #7a5200;
+  --na: #e9e8e4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --line: #33332f;
+    --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #8e8d86;
+    --accent: #3987e5; --accent-soft: #184f95;
+    --good-ink: #5fd35f; --critical-ink: #f08080; --warning-ink: #fac35a;
+    --na: #2a2a28;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --line: #33332f;
+  --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #8e8d86;
+  --accent: #3987e5; --accent-soft: #184f95;
+  --good-ink: #5fd35f; --critical-ink: #f08080; --warning-ink: #fac35a;
+  --na: #2a2a28;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "IBM Plex Sans", system-ui, sans-serif; }
+code, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; }
+a { color: var(--accent); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+header.top { border-bottom: 1px solid var(--line); background: var(--surface); }
+header.top .wrap { padding-top: 28px; padding-bottom: 24px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+h1 { font-size: 30px; line-height: 1.15; margin: 0 0 10px; font-weight: 600; letter-spacing: -.01em; }
+h2 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+h3 { font-size: 15px; margin: 18px 0 6px; font-weight: 600; }
+.lede { color: var(--ink-2); max-width: 760px; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 14px; color: var(--ink-3); font-size: 13px; }
+.notice { margin-top: 16px; padding: 10px 14px; border-left: 3px solid var(--ink-3); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
+.notice.sample { border-color: var(--serious); }
+section { padding: 34px 0 6px; }
+.sub { color: var(--ink-2); margin: 0 0 16px; max-width: 760px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.tile .k { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.tile .v { font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tile .n { font-size: 13px; color: var(--ink-2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--ink-3); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.grid td.cell { padding: 4px; text-align: center; }
+.chip { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 64px; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: default; }
+.s-pass { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good-ink); }
+.s-warn { background: color-mix(in srgb, var(--warning) 24%, transparent); color: var(--warning-ink); }
+.s-fail { background: color-mix(in srgb, var(--critical) 18%, transparent); color: var(--critical-ink); }
+.s-na { background: var(--na); color: var(--ink-3); }
+.sev { font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
+.sev-critical { border-color: var(--critical); color: var(--critical-ink); }
+.sev-high { border-color: var(--serious); }
+.muted { color: var(--ink-3); }
+.dims { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.dim { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.dim .name { font-size: 13px; color: var(--ink-2); text-transform: capitalize; }
+.dim .score { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar-track { height: 4px; background: var(--surface-2); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--accent); }
+svg text { fill: var(--ink-2); font: 12px "IBM Plex Sans", system-ui, sans-serif; }
+svg .gridline { stroke: var(--line); stroke-width: 1; }
+svg .bar { fill: var(--accent); }
+svg .hit { fill: transparent; cursor: default; }
+svg .hit:hover + .bar, svg .bar.hover { opacity: .8; }
+details.control { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+details.control > summary { list-style: none; cursor: pointer; padding: 14px 16px; display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; }
+details.control > summary::-webkit-details-marker { display: none; }
+details.control > summary .id { font-family: "IBM Plex Mono", monospace; color: var(--ink-3); }
+details.control[open] > summary { border-bottom: 1px solid var(--line); }
+details.control .body { padding: 4px 16px 16px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+ol.runbook { margin: 0; padding-left: 20px; }
+ol.runbook li { margin-bottom: 4px; }
+pre { background: var(--surface-2); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 0; }
+details.sql > summary { cursor: pointer; color: var(--accent); font-size: 13.5px; margin-top: 14px; }
+.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 6px; max-width: 360px; white-space: pre-line; opacity: 0; transition: opacity .08s; }
+.tip.on { opacity: 1; }
+footer { margin-top: 40px; padding: 24px 0 40px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.theme-toggle { float: right; background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } h1 { font-size: 24px; } details.control > summary { grid-template-columns: 40px 1fr; } details.control > summary .right { grid-column: 2; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <button class="theme-toggle" type="button" id="theme">Theme</button>
+    <p class="eyebrow">Investment data quality · SEC Form 13F</p>
+    <h1>Holdings Data Quality Monitor</h1>
+    <p class="lede">{{ controls|length }} SQL controls run against every quarterly Form 13F holdings report that {{ run.filer }} has filed with the US SEC in the window below. Each control has an owner, a severity, a value-affected measure, an SLA and a triage runbook; exceptions go into a review queue.</p>
+    <div class="meta">
+      <span>Filer: {{ run.filer }} (SEC CIK {{ run.cik }})</span>
+      <span>Latest quarter: {{ latest }}, filed {{ latest_filing.filed_date }}</span>
+      <span>Control run: {{ run.run_id }}</span>
+      <span>Page built: {{ generated }}</span>
+    </div>
+    {% if run.sample %}
+    <div class="notice sample"><strong>Sample data.</strong> This page was built from the synthetic filings bundled with the code, with known defects planted on purpose. Issuers, identifiers and values are invented.</div>
+    {% else %}
+    <div class="notice">Independent project built from public filings on <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK={{ run.cik }}&amp;type=13F">SEC EDGAR</a>. Not affiliated with or endorsed by {{ run.filer }} or any of its businesses. Exceptions are items for review under the rules described on this page; many will have ordinary explanations, and none should be read as a statement that a filing is wrong. The owners, severities, SLAs and runbooks show how a firm would operate these controls on its own data; here the review queue is worked by the author of this page, and the SLA measures the author's review turnaround, not anything the filer does.</div>
+    {% endif %}
+  </div>
+</header>
+
+<main class="wrap">
+<section>
+  <h2>Latest quarter at a glance</h2>
+  <p class="sub">{{ latest }}, the current version of the report (original plus any amendments).</p>
+  <div class="tiles">
+    <div class="tile"><div class="k">Holdings lines</div><div class="v">{{ "{:,}".format(kpi.lines) }}</div><div class="n">in the information table</div></div>
+    <div class="tile"><div class="k">Reported value</div><div class="v">{{ kpi.value }}</div><div class="n">US dollars</div></div>
+    <div class="tile"><div class="k">Value clear</div><div class="v">{{ "%.2f"|format(kpi.clear_share * 100) }}%</div><div class="n">{{ kpi.flagged_value }} on lines with a medium or higher exception</div></div>
+    <div class="tile"><div class="k">Controls with exceptions</div><div class="v">{{ kpi.failing_now|length }} of {{ controls|length }}</div><div class="n">{{ kpi.failing_now|join(", ") if kpi.failing_now else "none" }}</div></div>
+    <div class="tile"><div class="k">Awaiting review</div><div class="v">{{ kpi.open_issues }}</div><div class="n">{{ kpi.breached }} past the review SLA, across all quarters</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Scorecard</h2>
+  <p class="sub">Latest run, by data quality dimension for {{ latest }}, then every control by quarter. ✓ no exceptions; ✕ exceptions on a critical or high severity control; ! exceptions on a medium or low one; ○ not applicable. Hover a cell for the filings behind it.</p>
+  <div class="dims">
+  {% for d in by_dimension %}
+    <div class="dim"><div class="name">{{ d.dimension }}</div><div class="score">{{ d.passing }}<span class="muted" style="font-size:14px"> / {{ d.applicable }} passing</span></div>
+    <div class="bar-track"><div class="bar-fill" style="width: {{ (100 * d.passing / d.applicable) if d.applicable else 0 }}%"></div></div></div>
+  {% endfor %}
+  </div>
+  <div class="card scroll">
+  <table class="grid">
+    <thead><tr><th>Control</th><th>Dimension</th><th>Severity</th><th>Owner</th>{% for p in periods %}<th class="num" style="text-align:center">{{ p }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for row in grid %}
+      <tr>
+        <td><a href="#{{ row.c.id }}" class="mono">{{ row.c.id }}</a> {{ row.c.name }}</td>
+        <td style="text-transform:capitalize">{{ row.c.dimension }}</td>
+        <td><span class="sev sev-{{ row.c.severity }}">{{ row.c.severity }}</span></td>
+        <td class="muted">{{ row.c.owner }}</td>
+        {% for cell in row.cells %}
+        <td class="cell"><span class="chip s-{{ 'na' if cell.status == 'not_applicable' else cell.status }}" tabindex="0" data-tip="{{ cell.tip }}">{% if cell.status == 'pass' %}✓ clear{% elif cell.status == 'fail' %}✕ review{% elif cell.status == 'warn' %}! review{% else %}○ n/a{% endif %}</span></td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Value on lines with exceptions, by quarter</h2>
+  <p class="sub">Share of each quarter's reported value sitting on lines with at least one exception of medium severity or above. Failures of report-level controls (such as a unit error, C12) are named under the bar, because they affect the whole report rather than individual lines.</p>
+  <div class="card">
+  {% set W = 1000 %}{% set H = 240 %}{% set L = 56 %}{% set B = 46 %}{% set T = 14 %}
+  {% set top = axis_top %}
+  {% set step = (W - L - 10) / chart|length %}
+  <svg viewBox="0 0 {{ W }} {{ H }}" width="100%" role="img" aria-label="Share of value on lines with exceptions by quarter">
+    {% for t in ticks %}
+      {% set y = H - B - (H - T - B) * t / top %}
+      <line class="gridline" x1="{{ L }}" x2="{{ W - 10 }}" y1="{{ y }}" y2="{{ y }}"/>
+      <text x="{{ L - 8 }}" y="{{ y + 4 }}" text-anchor="end">{{ ("%g"|format(t * 100)) }}%</text>
+    {% endfor %}
+    {% for c in chart %}
+      {% set x = L + step * loop.index0 + step * 0.25 %}
+      {% set f = (1 - c.share) if c.share is not none else 0 %}
+      {% set h = (H - T - B) * f / top %}
+      {% set tip = c.label ~ "\n" ~ ("%.3f"|format(f * 100)) ~ "% of value flagged\n" ~ money(c.flagged) ~ " of " ~ money(c.value) ~ (("\nReport-level control failed: " ~ c.fail|join(", ")) if c.fail else "") %}
+      <rect class="bar" x="{{ x }}" y="{{ H - B - [h, 0]|max }}" width="{{ step * 0.5 }}" height="{{ [h, 0]|max }}" rx="2"/>
+      <rect class="hit" x="{{ L + step * loop.index0 }}" y="{{ T }}" width="{{ step }}" height="{{ H - T - B }}" tabindex="0" data-tip="{{ tip }}"/>
+      <text x="{{ x + step * 0.25 }}" y="{{ H - B + 18 }}" text-anchor="middle">{{ c.label }}</text>
+      {% if c.fail %}<text x="{{ x + step * 0.25 }}" y="{{ H - B + 35 }}" text-anchor="middle" style="fill: var(--critical-ink)">✕ {{ c.fail|join(", ") }}</text>{% endif %}
+    {% endfor %}
+  </svg>
+  </div>
+</section>
+
+<section id="issues">
+  <h2>Review queue</h2>
+  <p class="sub">One item per control per filing with exceptions. The review SLA runs in business days from first detection to a recorded decision (critical 1, high 3, medium 10, low 20), and applies to the author of this page. Decisions are recorded in <code>state/triage.yaml</code> and reviewed through pull requests, so every closure has an owner, a date and a reason in version control. {{ kpi.issues_total }} items in total.</p>
+  <div class="card scroll">
+  <table>
+    <thead><tr><th>Item</th><th>Control</th><th>Severity</th><th>Status</th><th>First seen</th><th>Review due</th><th>Review SLA</th><th class="num">Items</th><th class="num">Value affected</th><th>Example</th></tr></thead>
+    <tbody>
+    {% for i in issues %}
+      <tr>
+        <td class="mono" style="white-space:nowrap">{{ i.issue_id }}</td>
+        <td><a href="#{{ i.control_id }}" class="mono">{{ i.control_id }}</a><div class="muted" style="font-size:12px">{{ i.owner }}</div></td>
+        <td><span class="sev sev-{{ i.severity }}">{{ i.severity }}</span></td>
+        <td>{{ i.status }}{% if i.triage_decision %}<div class="muted" style="font-size:12px">{{ i.triage_decision|replace('_', ' ') }}: {{ i.triage_note }}</div>{% endif %}</td>
+        <td style="white-space:nowrap">{{ i.first_seen }}</td>
+        <td style="white-space:nowrap">{{ i.sla_due }}</td>
+        <td>{% if i.sla_state == 'breached' or i.sla_state == 'missed' %}<span class="chip s-warn">! {{ 'overdue' if i.sla_state == 'breached' else 'late' }}</span>{% elif i.sla_state == 'met' %}<span class="chip s-pass">✓ met</span>{% else %}<span class="chip s-na">within</span>{% endif %}</td>
+        <td class="num">{{ "{:,}".format(i.exceptions|int) }}</td>
+        <td class="num">{{ money(i.exception_value) if i.exception_value else "n/q" }}</td>
+        <td class="muted" style="font-size:12.5px; min-width: 220px">{{ i.example }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="10" class="muted">Nothing in the queue.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Controls</h2>
+  <p class="sub">Each control is one SQL file with its metadata in a header. The runbooks are written so that an analyst who did not build the control (including an offshore team working a different time zone) can triage an exception and know when to escalate.</p>
+  {% for c in controls %}
+  {% set pc = per_control[c.id] %}
+  <details class="control" id="{{ c.id }}">
+    <summary>
+      <span class="id">{{ c.id }}</span>
+      <span><strong>{{ c.name }}</strong><br><span class="muted" style="font-size:13px; text-transform:capitalize">{{ c.dimension }} · {{ c.owner }}</span></span>
+      <span class="right"><span class="sev sev-{{ c.severity }}">{{ c.severity }}</span> <span class="muted" style="font-size:13px">{{ "{:,}".format(pc.exceptions) }} exception{{ "" if pc.exceptions == 1 else "s" }}{% if pc.explained %}, {{ pc.explained }} auto-explained{% endif %}</span></span>
+    </summary>
+    <div class="body">
+      <div class="two">
+        <div><h3>What it checks</h3><p>{{ c.description }}</p></div>
+        <div><h3>Why it matters</h3><p>{{ c.impact }}</p></div>
+      </div>
+      <h3>Triage runbook</h3>
+      <ol class="runbook">{% for step in c.runbook %}<li>{{ step }}</li>{% endfor %}</ol>
+      <div class="facts"><span>Scope: {{ c.scope }}</span><span>SLA: {{ {'critical':1,'high':3,'medium':10,'low':20}[c.severity] }} business day(s)</span><span>Source: <code>controls/{{ c.path.name }}</code></span></div>
+      {% if pc.top %}
+      <h3>Largest exceptions, latest run (all quarters)</h3>
+      <div class="scroll"><table>
+        <thead><tr><th>Quarter</th><th>Item</th><th class="num">Value</th><th>Detail</th></tr></thead>
+        <tbody>{% for e in pc.top %}<tr><td>{{ e.period_label }}</td><td class="mono">{{ e.entity }}</td><td class="num">{{ money(e.value_usd) }}</td><td>{{ e.detail }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% endif %}
+      {% if pc.explained_rows %}
+      <h3>Cleared automatically</h3>
+      <div class="scroll"><table><tbody>{% for e in pc.explained_rows %}<tr><td>{{ e.period_label }}</td><td class="mono">{{ e.entity }}</td><td>{{ e.detail }}</td></tr>{% endfor %}</tbody></table></div>
+      {% endif %}
+      <details class="sql"><summary>Show the SQL</summary><pre><code>{{ c.query }}</code></pre></details>
+    </div>
+  </details>
+  {% endfor %}
+</section>
+
+<section>
+  <h2>Filings in scope</h2>
+  <p class="sub">Every 13F holdings report and amendment in the window. For each quarter, the latest of the original and any restatement is the base; "new holdings" amendments add to it; anything older is superseded but still checked as a document.</p>
+  <div class="card scroll">
+  <table>
+    <thead><tr><th>Quarter</th><th>Accession</th><th>Form</th><th>Filed</th><th>Role</th><th class="num">Lines declared</th><th class="num">Value declared</th><th>Units (by filing date)</th></tr></thead>
+    <tbody>
+    {% for f in filings %}
+      <tr>
+        <td>{{ f.period_label }}</td>
+        <td class="mono">{% if f.source_url and f.source_url.startswith('http') %}<a href="{{ f.source_url }}">{{ f.accession }}</a>{% else %}{{ f.accession }}{% endif %}</td>
+        <td>{{ f.form }}{% if f.amendment_type and f.amendment_type == f.amendment_type %} ({{ f.amendment_type|lower }}){% endif %}</td>
+        <td>{{ f.filed_date }}</td>
+        <td>{{ f.version_role }}</td>
+        <td class="num">{{ "{:,}".format(f.table_entry_total|int) }}</td>
+        <td class="num">{{ money(f.table_value_total_usd) }}</td>
+        <td>{{ "thousands" if f.value_multiplier == 1000 else "dollars" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Method and data</h2>
+  <div class="two">
+    <div>
+      <h3>Pipeline</h3>
+      <p>A scheduled GitHub Actions workflow downloads new filings from SEC EDGAR, loads them into DuckDB exactly as filed, and applies two interpretation rules in reviewed SQL: values are converted to dollars (13F values were reported in thousands until 3 January 2023), and amendments are resolved into the current version of each quarter. Before any control runs, each filing is reconciled line by line against the source document with <a href="https://github.com/trueset-dev/trueset">TrueSet</a>, an open-source data quality library by the author of this page (reported as C16). The controls are written in SQL that both DuckDB and Snowflake accept: DuckDB runs this page, and the same files run on Snowflake with the results reconciled against DuckDB, again with TrueSet. The controls run, the review queue is updated, and the results and state are committed back to the repository, so the history of every run is auditable.</p>
+      <h3>Limitations</h3>
+      <p>Form 13F covers US-listed equities and some convertibles and options held by the filer and the managers it includes; it is not the whole of any firm's assets. Controls see only what is in the filing, so they can find inconsistency, invalid values and implausible figures, but cannot confirm a figure against the firm's books. The timeliness control does not model US public holidays.</p>
+    </div>
+    <div>
+      <h3>Data for Power BI</h3>
+      <p>Every run writes a star schema of CSV files that Power BI loads directly. Relationships and suggested measures are in <code>docs/powerbi.md</code> in the repository.</p>
+      <ul>
+        <li><a href="data/dim_control.csv">dim_control.csv</a>: controls, owners, severity, SLA</li>
+        <li><a href="data/dim_filing.csv">dim_filing.csv</a>: filings and version roles</li>
+        <li><a href="data/fact_control_result.csv">fact_control_result.csv</a>: every result from every run</li>
+        <li><a href="data/fact_finding.csv">fact_finding.csv</a>: exceptions from the latest run</li>
+        <li><a href="data/fact_issue.csv">fact_issue.csv</a>: the review queue with SLA state</li>
+        <li><a href="data/fact_period_kpi.csv">fact_period_kpi.csv</a>: value clear of exceptions by quarter</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer><div class="wrap">Built by Iyanujesu Taiwo Akinyefa. Source data: public Form 13F filings on SEC EDGAR. Independent work; not affiliated with any filer named on this page.</div></footer>
+<div class="tip" id="tip" role="tooltip"></div>
+<script>
+(function () {
+  var tip = document.getElementById("tip");
+  function show(e) {
+    var t = e.currentTarget.getAttribute("data-tip"); if (!t) return;
+    tip.textContent = t; tip.classList.add("on");
+    var r = e.currentTarget.getBoundingClientRect();
+    var x = Math.min(r.left, window.innerWidth - tip.offsetWidth - 12);
+    var y = r.bottom + 8; if (y + tip.offsetHeight > window.innerHeight) y = r.top - tip.offsetHeight - 8;
+    tip.style.left = Math.max(8, x) + "px"; tip.style.top = y + "px";
+  }
+  function hide() { tip.classList.remove("on"); }
+  document.querySelectorAll("[data-tip]").forEach(function (el) {
+    el.addEventListener("mouseenter", show); el.addEventListener("focus", show);
+    el.addEventListener("mouseleave", hide); el.addEventListener("blur", hide);
+  });
+  window.addEventListener("scroll", hide, { passive: true });
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("hdq-theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark"; root.setAttribute("data-theme", next);
+    try { localStorage.setItem("hdq-theme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
